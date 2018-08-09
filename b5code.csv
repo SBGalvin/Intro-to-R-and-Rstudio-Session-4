@@ -1,0 +1,51 @@
+Factor,Item,Scoring,Content
+E,E1,Pos,I am the life of the party.
+E,E2,Neg,I don't talk a lot.
+E,E3,Pos,I feel comfortable around people.
+E,E4,Neg,I keep in the background.
+E,E5,Pos,I start conversations.
+E,E6,Neg,I have little to say.
+E,E7,Pos,I talk to a lot of different people at parties.
+E,E8,Neg,I don't like to draw attention to myself.
+E,E9,Pos,I don't mind being the center of attention.
+E,E10,Neg,I am quiet around strangers.
+N,N1,Neg,I get stressed out easily.
+N,N2,Pos,I am relaxed most of the time.
+N,N3,Neg,I worry about things.
+N,N4,Pos,I seldom feel blue.
+N,N5,Neg,I am easily disturbed.
+N,N6,Neg,I get upset easily.
+N,N7,Neg,I change my mood a lot.
+N,N8,Neg,I have frequent mood swings.
+N,N9,Neg,I get irritated easily.
+N,N10,Neg,I often feel blue.
+A,A1,Neg,I feel little concern for others.
+A,A2,Pos,I am interested in people.
+A,A3,Neg,I insult people.
+A,A4,Pos,I sympathize with others' feelings.
+A,A5,Neg,I am not interested in other people's problems.
+A,A6,Pos,I have a soft heart.
+A,A7,Neg,I am not really interested in others.
+A,A8,Pos,I take time out for others.
+A,A9,Pos,I feel others' emotions.
+A,A10,Pos,I make people feel at ease.
+C,C1,Pos,I am always prepared.
+C,C2,Neg,I leave my belongings around.
+C,C3,Pos,I pay attention to details.
+C,C4,Neg,I make a mess of things.
+C,C5,Pos,I get chores done right away.
+C,C6,Neg,I often forget to put things back in their proper place.
+C,C7,Pos,I like order.
+C,C8,Neg,I shirk my duties.
+C,C9,Pos,I follow a schedule.
+C,C10,Pos,I am exacting in my work.
+O,O1,Pos,I have a rich vocabulary.
+O,O2,Neg,I have difficulty understanding abstract ideas.
+O,O3,Pos,I have a vivid imagination.
+O,O4,Neg,I am not interested in abstract ideas.
+O,O5,Pos,I have excellent ideas.
+O,O6,Neg,I do not have a good imagination.
+O,O7,Pos,I am quick to understand things.
+O,O8,Pos,I use difficult words.
+O,O9,Pos,I spend time reflecting on things.
+O,O10,Pos,I am full of ideas.

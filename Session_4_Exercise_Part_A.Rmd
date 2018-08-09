@@ -1,0 +1,290 @@
+---
+title: "Introduction to R and Rstudio"
+subtitle: "Session 4: Data Wrangling"
+output: html_notebook
+---
+
+This is part I of a II part series on psychometric data analysis using the IPIP Big Five personality data set
+https://openpsychometrics.org/_rawdata/
+
+All code chunks should display in notebook format
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+About Part I:
+
+Data analysis is a constructuve and sequential process. We slowly build our picture of what the data are telling us (in this case about our personality inventory) through screening, cleaning and preparation. Then we may describe the data we have through summary statistics and visualisation. Gradually we may build in more complex procedures which may reveal structure in the data, it is this structure that we are interested in with psychometrics, firstly the factorial (dimensional) structure, and then the order structure, which may allow us to provide an interval estimation of a persons underlying ability (Item Response Theory). 
+
+The task of this session is to prepare our data adequately so that we may use it later for our various psychometric procedures.
+
+So first we are going to set up some options
+```{r}
+options(scipen = 999)
+options(stringsAsFactors = FALSE) # strings automatically read as strings rather than factors
+set.seed(42) # make random splits/ assignments reproducible
+```
+
+#A Importing and Preparing Data
+##1 Data Set
+
+This is a large data set *n = 19719*, the data is actually separated by tabs, so we will specify that in the `read.table()` function to draw in the data.
+
+The Data Set includes items which are rated on a 1-5 likert scale. Some need to be reverse coded
+
+### Import Data
+```{r echo=TRUE}
+# data is tab separated so we will use the sep="\t" argument inside read.csv()
+b5 <- read.table("b5data.csv", header = TRUE, sep = "\t")
+# Now type in the data frame name to see the raw data
+b5 # in the R notebook, the dataframe will be navigable
+# head(b5) # if using R script, remove the # at the start of this line to view the first 5 rows
+```
+
+If we use the `str()` function, R will tell us what kind of variables are in our dataframe object
+```{r echo=TRUE}
+str(b5)
+```
+
+If we look a the Country code, we can note that some of the country labels are alphanumeric (A1 etc) this would most likely be unicode that The console can't read for a country label written in a non-latin based language, Arabic etc. 
+
+So to look at how many unique country codes there are in our data set we can use the `unique()` function, and `tidyverse` and its forward pipe (`%>%`) operator to extract some useful descriptive data
+
+```{r echo=TRUE}
+unique(b5$country)
+```
+
+## 2 Tidyverse
+load the tidyverse set of packages
+```{r echo=TRUE}
+library(tidyverse) # the list of packages and conflict warnings should show up in the output
+```
+
+use the forward pipe operator `%>%` to pass a dataset through a function to count the number of countrys available
+```{r}
+b5 %>%
+  count(country)
+```
+
+The discrepancy between unique and count is interesting,`unique()` counts the number of *unique factor levels* (named) in an object, whereas `count()` in tidyverse counts the number of tagged counts, including the un-labelled. We can take this *unlabelled* factor as a data entry error. 
+
+There is no need to delete anything individually, as we will be removing rows that we are not certain are from English-As-First-Language countries.
+
+Considering that personality inventories are constructed using the `Lexical hypothesis` of personality, then we should (for now) narrow down our analyses English language speaking countries. To narrow down to English speaking countries we will filter the countries by language.
+
+Using the Codebook which comes with the big five data set, we will extract a list of items to reverse score. The items are scored on a 1-5 scale, so when we reverse score a persons response `x`, we will subtract it from 6 ==> `6-x`.
+
+Read in the code book
+```{r echo=TRUE}
+codebook <- as_data_frame(read.csv("b5code.csv", 
+           header=TRUE))
+codebook
+```
+
+Now Filter out the Pos Scored items, leaving only the negatively scored items. This leaves us with a list of values to reverse score
+```{r}
+codebook %>%
+  filter(Scoring == "Neg") %>%
+  select(Item, Scoring) -> Revscore
+Revscore
+```
+
+If we extract the negative items into a new object we can then save this as a list of character strings
+```{r}
+rsc <- as.character(Revscore$Item)
+rsc # this will be used for reverse scoring
+```
+
+We can then apply a function to revers score the items using the bracket subset method
+```{r}
+# Reverse scores in the desired columns  using the rsc list
+b5[,rsc] = lapply(rsc,  function(x) 6 - b5[, x]) # This applies the reverse scoring
+head(b5)
+```
+
+###Factoring by country
+
+Data preparation is key to a good data analysis, a high-quality dataset will allow you to perform all necessary analyses. In our case, the raw data contains ISO Alpha 2 country codes, but it does not tell us if the participants spoke English as a first language. A conservative stategy would be to include only those countries with English as a first language; so we will draw in extra data from the web to refactor our country codes according to English-as-first-language in our Big5 data. 
+
+First we can read in some ISO data to identify which countries belong to what two letter codes
+
+```{r echo=TRUE}
+options(stringsAsFactors = FALSE)
+lang <- read.csv(url("https://pkgstore.datahub.io/core/country-codes/country-codes_csv/data/3b9fd39bdadd7edd7f7dcee708f47e1b/country-codes_csv.csv"), sep=",", header = TRUE)
+```
+
+Using the `%>%` operator we can pass our ISO dataframe `lang` through the select `select()` and `rename()` functions to produce a new dataframe with easier column names
+```{r}
+lang %>%
+  select(official_name_en, 
+         ISO3166.1.Alpha.2, 
+         Languages) %>%
+  rename("Name_en" = "official_name_en",
+                 "Alpha2" = "ISO3166.1.Alpha.2", 
+                 "Languages" = "Languages") ->> lang.2
+```
+
+##3 Conditional Selection
+Now we can use the `mutate()` function to create a new variable named `ENG` that indicates if the country's first language is English or not. 
+
+We need to make a condition that the data meet in order to identify wheter a row of responses belongs to a English-As -First-Langage_Country
+
+We can use a method called `regular expressions` or `regex` to identify if we have a character match in side each cell of a character variable, we want to match if English is the first language ins the cell so we can use `^` to specify that `en` should appear at the start of a string: "^en"
+
+We can use an `ifelse()` function as part of a conditional statement inside of `mutate()` which will create a new variable:
+
+The ifelse method kind of goes like this
+
+**IF** 
+
+The first character set in lang2$Languages is "en"
+
+**THEN**
+
+Assign a value of "ENG" to the new variable
+
+**ELSE**
+
+In any other case that does not meet the condition, Assign a value of "Other"
+
+
+Here is the function
+```{r}
+lang.2 <- mutate(lang.2, 
+                 ENG = ifelse(grepl("^en", Languages), 
+                              "ENG", "Other"))
+head(lang.2)
+```
+We can see in the data frame that where en is first in the language column, a value of ENG has been assigned into the ENG column.
+
+
+Now we can merge the lang2 dataframe and the big 5 data frame:
+```{r}
+bigfive <- b5 # For new DF
+#write.csv(lang.2, file = "HEXACO//langiso.csv") #write csv
+#lang.2 <- read.csv("HEXACO/langiso.csv")
+#lang.2$X=NULL
+#Create Eng variable
+bigfive$ENG <- lang.2$ENG[match(as.character(bigfive$country), # new col with en 1st lang (yes/no)
+                               as.character(lang.2$Alpha2))]
+bigfive$ENG[is.na(bigfive$ENG)] <- "unknown" # replaces na
+bigfive$Name_en <- lang.2$Name_en[match(as.character(bigfive$country), # new col with country name
+                                        as.character(lang.2$Alpha2))]
+head(bigfive) # Now check out your dataframe
+```
+
+###Counts 
+Now that we have some way to separate the data out, we can take a look and see how many participants come from each `English-as-first-language` country using the `filter()` function:
+```{r echo=TRUE}
+bigfive %>%
+  filter(ENG == "ENG") ->> bigfive.en
+bigfive.en
+```
+
+We can view counts:
+```{r echo=TRUE}
+bigfive.en %>%
+    count(country)
+```
+
+##4 Visualisation
+Now that is still alot of data to go through row by row. If we were to table the data it still wouldn't convey all of the count information. Instead we can use a bar plot in ggplot2. The discrete scale colouring is from the `viridis` package.
+
+first we can transfrom the Country name to a factor and then summarise the count data for each country and store this in a variable named `Hcount`
+```{r echo=TRUE}
+library(viridis)
+bigfive.en$Name_en <- as.factor(bigfive.en$Name_en)
+
+
+bigfive.en %>%
+    count(Name_en) ->> Hcount
+```
+
+
+Now we can Order the Hcount variable by size:
+```{r}
+Hcount$Name_en <- factor(Hcount$Name_en, levels = Hcount$Name_en[order(-Hcount$n)])
+```
+
+Then plot using ggplot2
+```{r}
+#pdf("CountryUS.pdf")
+ggplot(Hcount, aes(Name_en, n, fill= Name_en))+
+  geom_bar(colour= 'black', stat = 'identity')+
+  scale_fill_viridis(discrete = TRUE)+
+   guides(fill=FALSE)+
+  theme_void()+
+  coord_flip()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8), 
+        axis.text.y = element_text(angle=0, size=8))
+#dev.off()
+```
+
+As we can see the United States has the largest proportion of responses.
+This time we will exclude the US counts,
+```{r echo=TRUE}
+notwant <- "United States of America"
+```
+
+Now we can use the `%>%` operator and `filter()` and the `!` not operator to filter out the US data `%in%` `Name_en`
+```{r}
+#pdf("CountryNotUS.pdf")
+Hcount %>%
+  filter(!Name_en %in% notwant) %>%
+  ggplot(aes(Name_en, n, fill = Name_en)) +
+  geom_bar(colour = 'black', stat = 'identity') +
+  scale_color_viridis(discrete=TRUE)+
+  guides(fill = FALSE)+
+  coord_flip()+
+  theme_void()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8), 
+        axis.text.y = element_text(angle=0, size=8),
+        panel.background = NULL, 
+        panel.border = element_blank())
+#dev.off()
+```
+
+The GBNI is the next largest contributor to the data set, but by a distant margin. 
+
+Now we will filter out the some of the extra data and focus exclusively on UK, Ireland, Canada, Australia, New Zealand and the United states using tidyverses `filter()` function
+
+```{r echo=TRUE}
+
+keep <- c('United States of America', 
+          'United Kingdom of Great Britain and Northern Ireland',
+          'Ireland',
+          'New Zealand',
+          'Canada',
+          'Australia')
+bigfive.en %>%
+  filter(Name_en %in% keep) ->> b5.en_two # for later
+
+b5.en_two %>%
+  count(Name_en) ->> Hcount2
+```
+
+Save the b5.en_two data frame
+```{r}
+#write.csv(b5.en_two, "b5_en_two.csv")
+```
+
+```{r}
+# Order the DF
+Hcount2$Name_en <- factor(Hcount2$Name_en, levels = Hcount2$Name_en[order(-Hcount2$n)])
+```
+
+```{r}
+#pdf("CountriesWest.pdf")
+Hcount2 %>% 
+  ggplot(aes(Name_en, n, fill = Name_en)) +
+  geom_bar(colour = 'black', stat = 'identity')+
+  scale_color_viridis(discrete=TRUE)+
+  guides(fill = FALSE)+
+  coord_flip()+
+  theme_void()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8), 
+        axis.text.y = element_text(angle=0, size=8),
+        panel.background = NULL, 
+        panel.border = element_blank())
+#dev.off()
+```
+

@@ -1,0 +1,322 @@
+---
+title: "Introduction to R and Rstudio"
+subtitle: "Session 4: Data Wrangling: Part C"
+output: html_notebook
+---
+
+# B Preparation for Analysis
+First Clear the environment
+```{r}
+rm(list=ls())
+```
+
+
+```{r}
+library(tidyverse)
+```
+
+
+We will use the b5.en_two data frame for a Factor analysis
+I have written this as a .csv file: 
+```{r}
+#write.csv(b5.en_two, "6countryB5.csv")
+```
+If you want to split up the .Rmd file, you can copy and paste from here down, and read in the following code after removing the comments:
+```{r}
+b5.en_two <- read.csv("b5_en_two.csv")
+#b5.en_two$X <- NULL # This Drops the X column, which draws in as a rowname indicator
+```
+
+View the data frame
+```{r}
+b5.en_two$X.1 <- NULL  # Drop he superfluous columns
+b5.en_two
+```
+
+##1 Data Split
+
+Spliting data is quite a handy tool and can be used fo multiple methods such as an EFA or CFA, or a cross validation procedure.
+
+### Splitting data for separate analyses
+We will now split the dataset into 2 groups, one for Factor analysis and one for IRT.
+This works by taking an index number for all the rows, then randomly selecting a proportion of index numbers and saving this as a variale `sampleFa`, we then subset the `bf` data frame as the list of indexes - the random index sample (FA), or just including the random index sample (IRT)
+```{r echo=TRUE}
+bf <- b5.en_two
+# FA and IRT split
+set.seed(2374) # Set Seed so that same sample can be reproduced in future also
+# Now Selecting 75% of data as sample from total 'n' rows of the data  
+sample1 <- sample.int(n = nrow(bf), size = floor(.50*nrow(bf)), replace = F)
+IRT <- bf[sample1, ]
+FA  <- bf[-sample1, ]
+```
+
+### Further split for Factor Analysis
+Before we perform a factor analysis we will split the Factor analysis into two sets, one for EFA (75%) and one for CFA (25%). The original Big 5 factor structure is extracted using a PCA algorithm. Under IRT the *Latent variable* causes the score, so a latent structure needs to be extracted, and tested using a CFA.
+
+```{r echo=TRUE}
+sampleFA <- sample.int(n = nrow(FA), size = floor(.75*nrow(FA)), replace = F)
+FA_efa <- FA[sampleFA, ]
+FA_cfa <- FA[-sampleFA, ]
+```
+
+I have also written the data sets as .csv files
+```{r}
+# We also write these as .csv files for later
+#write.csv(FA_efa, file ='EFA_B5.csv') # EFA Data
+#write.csv(FA_cfa, file = 'CFA_B5.csv') # CFA Data
+#write.csv(IRT, file = 'IRT_B5.csv') # IRT Data
+```
+
+Note that later for the FA and CFA we will only include the items from the scale, rather than all variables
+
+
+#C Exploratory Factor Analysis 
+
+Because we are later interested in fitting an IRT model to our data, we presume a causal relationship between the latent factors of personality and the observable indicators od the big five questionnaire, we could also perform a principal components analysis (PCA) but this does not test the causal structure of the data. 
+
+If you have split up the markdown file you can just read in the .csv filesFirst we will load in the data
+
+```{r}
+#FA_efa <- read.csv('EFA_B5.csv', rownames = FALSE)
+#FA_cfa <- read.csv('CFA_B5.csv', rownames = FALSE)
+```
+
+##1 Drop unwanted variables
+
+Second we will drop all variables from the data frame that are not 
+Note that for the FA and CFA we will only include the items form the scale, rather than all variables
+```{r}
+# subset data to include only the items of interest
+data_FA <- FA_efa[,8:57]
+names(data_FA) # There should be 50 col names all alphanumeric
+```
+```{r}
+data_FA
+```
+
+
+Now do the same for the CFA data
+```{r}
+# subset data to include only the items of interest
+data_CFA <- FA_cfa[,8:57]
+names(data_CFA) # There should be 50 col names all alphanumeric
+```
+
+
+##2 Multivariate plot
+Now we are going to graphically explore item score distribution  using ggplot. We will use melt from reshape2 to create a long form data frame
+```{r}
+library(reshape2)
+data_FA2 <- data_FA
+data_FA2$id <- factor(seq(1:nrow(data_FA)))
+efa.melt <- melt(data_FA2)
+
+efa.melt$Dimension <- efa.melt$variable
+efa.melt$Dimension <- sub("^(.).*(\\d).*$", "\\1\\", efa.melt$Dimension) 
+efa.melt$Dimension <-  factor(efa.melt$Dimension)
+
+ord <- c("O", "C", "E", "A", "N")
+efa.melt$Dimension <- factor(efa.melt$Dimension,levels=ord)
+head(efa.melt)
+```
+```{r}
+str(efa.melt)
+```
+
+Load the viridis colour scale
+```{r}
+library(viridis)
+#
+```
+
+###
+Now we can plot the data
+```{r}
+ggplot(efa.melt, aes(value)) +
+  geom_histogram(binwidth = 1) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8), 
+        axis.text.y = element_blank(),
+        panel.background = NULL, 
+        panel.border = element_blank())+
+  scale_fill_viridis(discrete = TRUE)+
+    facet_wrap(~variable, ncol=10, scales='free')
+```
+
+If we add the `aes()` layer to the ggplot, we can get a change in colour according to factor
+```{r}
+#pdf("MVNHist.pdf")
+ggplot(efa.melt, aes(value))+
+  geom_histogram(bins = 5, colour='black')+
+  aes(fill = Dimension, col = "black") + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8), 
+        axis.text.y = element_blank(),
+        panel.background = NULL, 
+        panel.border = element_blank())+
+    facet_wrap(~variable, ncol=10, scales='free')+
+  ggtitle("Histograms of all Items", subtitle = "By B5 Dimension")
+#dev.off()
+```
+
+As we can see there are a variety of non-normally shaped distributions, but this may be due to the variance constraint that 5-point likert scales place on data
+
+##2 Factor Analysis
+
+First we will need to call up some familiar libraries
+```{r}
+library(psych)
+```
+
+
+Bartlett's test
+```{r}
+#cortest.bartlett(data_FA)
+```
+
+KMO measure of sampling adequacy
+```{r}
+#KMO(data_FA)
+```
+
+As our overall MSA is 0.91, we can go ahead with the planned factor analysis. First we can perform a parallel analysis to indicate how many factors we should extract. 
+
+```{r}
+# parallel analysis
+#fa.parallel(data_FA, fm = 'ml', fa = 'fa')
+```
+
+Our parallel analysis graphic indicates that we should aim to extract 5 factors, due to the sharp decrease in eigen value (ie <1) when approaching a sixth factor. However, using the Cattell visual analysis that the elbow occurs after the ninth factor. Now we will just compare this to a PCA algorithm
+
+```{}
+plot.new()
+parallel2 <- fa.parallel(data_FA, fm = 'ml', fa = 'pca')
+```
+
+Now we can look at the Factor Loadings with a five factor model
+```{r}
+#bf.fa <- fa(data_FA,nfactors = 5,rotate = "varimax",fm="ml", use = 'complete')
+
+#print(bf.fa$loadings, cutoff = 0.3)
+```
+
+
+```{r}
+# This saves the loadings to a new file, which I have edited
+#capture.output( print(bf.fa$loadings), file="FiveFactorLoadings.csv")
+```
+
+
+Useful functions
+```{r}
+# Get lower triangle of the correlation matrix
+  get_lower_tri<-function(cormat){
+    cormat[upper.tri(cormat)] <- NA
+    return(cormat)
+  }
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+```
+
+## Correlation matrix
+```{r}
+Ord <- c("O01","O02", "O03", "O04", "O05", "O06", "O07", "O08", "O09", "O10", 
+         "C01", "C02", "C03", "C04", "C05", "C06", "C07", "C08", "C09", "C10",
+         "E01", "E02", "E03", "E04", "E05", "E06", "E07", "E08", "E09", "E10", 
+         "A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10",
+         "N01", "N02", "N03", "N04", "N05", "N06", "N07", "N08", "N09", "N10")
+
+colnames(data_FA) <- Ord
+data_FA %>%
+  mutate_at(funs(as.numeric), .vars=Ord) ->> data_FA
+
+efa_cor <- round(cor(data_FA),2) #  correlation matrix
+```
+
+
+```{r}
+corrs.m <- melt(efa_cor, id="Test", variable.name="Test2", value.name="Correlation")
+corrs.m
+```
+
+
+Next create a correlation matrix of data
+
+```{r}
+efa_cor <- round(cor(data_FA),2)
+
+# get upper triangle
+upper_tri <- get_lower_tri(efa_cor)
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+```
+
+```{r}
+library(grid)
+ggplot(data = melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "black")+
+  scale_fill_viridis( limit = c(-1,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme(legend.position = c(0.85, 0.3),
+        axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 8),
+        plot.margin = unit(c(3, 1, 0, 0), "mm"),
+        panel.background = NULL,
+        axis.title = element_blank(),
+        axis.ticks.x = element_blank())+
+  coord_fixed() ->> p1
+   #omit unnecessary gradient legend
+```
+
+```{r}
+p1
+# Note I removed the correlation values as needed
+# reinsert the following line to produce correlation values
+#   geom_text(aes(label = round(value, 2)), size=2.)
+```
+
+Save the output
+```{r}
+#pdf("HeatmapFactor.pdf")
+p1
+#dev.off()
+```
+
+
+```{r}
+ggplot(data = corrs.m, aes(Var2, Var1, fill = Correlation))+
+ geom_tile(color = "black")+
+  scale_fill_viridis( limit = c(-1,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme(axis.title.x = element_blank(), 
+        axis.title.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(size = 8),
+       plot.margin = unit(c(3, 1, 0, 0), "mm"),
+       panel.background = NULL)+
+  coord_fixed()+
+  guides(fill = FALSE) ->> p1_alt
+```
+
+
+```{r}
+#pdf("HeatmapFactor_alt.pdf")
+p1_alt
+#dev.off()
+```
+
+
+```{r}
+ggplot(data = melted_cormat, aes(Var2, Var1, fill = value))+
+  geom_tile(color = "black")+
+  theme_minimal()+ 
+  scale_colour_gradient2(high = 'yellow', 
+                         mid = "white",
+                         low = 'purple', 
+                         midpoint = 0, space = "Lab")+
+ theme(axis.text.x = element_text(angle = 90, vjust = 1, 
+    size = 8, hjust = 1),
+    axis.text.y = element_text(size = 8))+
+  coord_fixed()
+```

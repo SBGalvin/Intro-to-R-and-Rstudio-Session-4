@@ -1,0 +1,152 @@
+---
+title: "Introduction to R and Rstudio"
+subtitle: "Session 4: Data Wrangling: Part B"
+output: html_notebook
+---
+
+First use a command to clear all the environment variables
+```{r}
+rm(list=ls())
+```
+
+
+##5 Summarising with Tidyverse
+```{r}
+# load tidyverse
+library(tidyverse)
+```
+
+
+Now that we have our data organised, we can summarise it.
+
+First we must read in the csv file from part 1
+```{r}
+b5.en_two  <-  read.csv("b5_en_two.csv")
+```
+
+First we will summarise all of the data
+Then summarise by group
+
+###Summarise all
+
+first take a look at the column names
+```{r}
+b5.en_two$ID  <-  factor(seq(1:nrow(b5.en_two))) # create an ID variable
+names(b5.en_two)
+```
+
+So we want to keep X, Eng, Name_en, Age and Gender and all the items and remove the rest of the variable.
+We could i apply a NULL value to each column, or ii we could use the not `-` operator next to the `c()` function inside the `select()` function: 
+Lets do number ii:
+```{r}
+b5.en_two %>%
+  select(-c(race, engnat, hand, source)) %>%
+  select(ID, age, gender, country,ENG, Name_en, everything()) ->> b5.tdy1
+
+b5.tdy1$gender <- factor(b5.tdy1$gender)
+b5.tdy1$ENG    <- factor(b5.tdy1$ENG)  
+b5.tdy1$X.1 <- NULL # Remove the superfluos variable
+b5.tdy1
+```
+
+We can recode the gender Factor to Representthe gender names (Values in the code book)
+```{r}
+
+b5.tdy1%>%
+  mutate(gender, gender  = fct_recode(gender, 
+                                      "None"   = "0",
+                                      "Male"   = "1", 
+                                      "Female" = "2",
+                                      "Other"  = "3")) ->> b5.tdy1
+```
+
+
+Now we can view the new df
+```{r}
+b5.tdy1
+```
+Next we want to transform the data into a long format data frame, keeping ID, age, gender and country constant.
+If we look a the column description, we can see that some columns are integer and some are numeric.
+
+So what we have to do first is transform all of the items into factor variables and just check their levels
+```{r}
+b5.tdy1 %>%
+  select(E1:O10) -> items
+str(items)
+```
+So all columns are integers
+
+Lets just take a look at the levels of the items, to ensure that there arent any values present that should not be
+```{r}
+iname <- names(items) #  create a list of variable names
+
+items %>%
+  mutate_all(funs(as.character(.)),iname) %>%
+  mutate_if(is.character, as.factor) %>% 
+  sapply(levels)
+```
+
+There is the correct number of levels (they should all be 1-5). So now we should convert all response data to one type:
+
+```{r}
+b5.tdy1 %>%
+  mutate_at(funs(as.numeric), .vars=iname) ->> b5.tdy2
+
+b5.tdy2
+```
+
+So now the b5.tdy2 data frame is ready for mutation. If we transform the data frame to a tidy df, with a factor level for each item, then we will be able to summarise responses to each item
+```{r}
+library(reshape2)
+```
+
+We can use melt to transform
+```{r}
+b5.tdy2 %>%
+  melt(id.vars = c("ID", "age", "gender", "country", "ENG", "Name_en"),  
+       variable.name="Item", 
+       value.name="Response") ->> b5.tdy3
+b5.tdy3
+```
+
+Now we can go one step further and create a factor/Dimension label for to be attached using a regex and ifelse function
+```{r}
+b5.tdy3$Dimension <- b5.tdy3$Item
+b5.tdy3$Dimension <- sub("^(.).*(\\d).*$", "\\1\\", b5.tdy3$Dimension) 
+b5.tdy3$Dimension <-  factor(b5.tdy3$Dimension)
+
+# Order the factor levels
+ord <- c("O", "C", "E", "A", "N")
+b5.tdy3$Dimension <- factor(b5.tdy3$Dimension,levels=ord)
+
+b5.tdy3 %>%
+  select(ID, age, gender, country,ENG, Name_en, Dimension, everything()) ->> b5.tdy4
+```
+
+And now we can view our new data frame
+```{r}
+b5.tdy4
+```
+
+
+And now we can summarise our data by using factor variables in the group-by argument
+```{r}
+# By Dimension summary
+b5.tdy4%>%
+  group_by(Dimension) %>%
+  summarise(Mean = mean(Response), 
+            StDev = sd(Response), 
+            Count = n(), 
+            StdErr = StDev/sqrt(Count))
+```
+
+```{r}
+# By gender Summary
+b5.tdy4 %>%
+  group_by(Dimension, gender) %>%
+  summarise(Mean = mean(Response), 
+            StDev = sd(Response), 
+            Count = n(), 
+            StdErr = StDev/sqrt(Count))
+```
+
